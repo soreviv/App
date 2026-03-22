@@ -156,6 +156,14 @@ export default function ToolsScreen() {
       action: () => setShowGroundingModal(true),
     },
     {
+      id: 'sounds',
+      title: 'Sonidos',
+      description: 'Sonidos de enmascaramiento para el tinnitus',
+      icon: 'musical-notes-outline',
+      color: '#795548',
+      action: () => router.push('/sounds'),
+    },
+    {
       id: 'factors',
       title: 'Factores Agravantes',
       description: 'Registra sueño, cafeína, estrés y más',

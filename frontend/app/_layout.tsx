@@ -61,6 +61,13 @@ export default function RootLayout() {
             presentation: 'card',
           }}
         />
+        <Stack.Screen
+          name="sounds"
+          options={{
+            title: 'Sonidos',
+            presentation: 'card',
+          }}
+        />
       </Stack>
     </>
   );
