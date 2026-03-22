@@ -85,8 +85,15 @@ export default function HomeScreen() {
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.greeting}>Tu Camino Hacia la Libertad</Text>
-          <Text style={styles.subtitle}>Programa de Habituación al Tinnitus</Text>
+          <View style={styles.headerRow}>
+            <View>
+              <Text style={styles.greeting}>Tu Camino Hacia la Libertad</Text>
+              <Text style={styles.subtitle}>Programa de Habituación al Tinnitus</Text>
+            </View>
+            <TouchableOpacity onPress={() => router.push('/settings')} style={styles.settingsButton}>
+              <Ionicons name="settings-outline" size={24} color={COLORS.textSecondary} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Progress Card */}
@@ -251,6 +258,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 8,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  settingsButton: {
+    padding: 8,
   },
   greeting: {
     fontSize: 24,

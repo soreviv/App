@@ -30,6 +30,10 @@ export default function ToolsScreen() {
   const { createABCRecord, createDailyLog, deviceId } = useAppStore();
   const [showABCModal, setShowABCModal] = useState(false);
   const [showBreathingModal, setShowBreathingModal] = useState(false);
+  const [showReplacementModal, setShowReplacementModal] = useState(false);
+  const [showGroundingModal, setShowGroundingModal] = useState(false);
+  const [replacementStep, setReplacementStep] = useState(0);
+  const [groundingStep, setGroundingStep] = useState(0);
   const [breathingPhase, setBreathingPhase] = useState<'inhale' | 'exhale' | 'done'>('inhale');
   const [breathingCount, setBreathingCount] = useState(0);
   const [breathingTimer, setBreathingTimer] = useState<NodeJS.Timeout | null>(null);
@@ -130,11 +134,10 @@ export default function ToolsScreen() {
     {
       id: 'mindfulness',
       title: 'Observación 3 Min',
-      description: 'Ejercicio de atención plena: observar sin luchar',
+      description: 'Ejercicio guiado de atención plena con temporizador',
       icon: 'eye-outline',
       color: '#9C27B0',
-      action: () => Alert.alert('Observación de 3 Minutos', 
-        'MINUTO 1: Observa tu respiración\n\nMINUTO 2: Observa el tinnitus sin juzgar\n\nMINUTO 3: Expande tu atención a otras sensaciones\n\nUsa un cronómetro de 3 minutos.'),
+      action: () => router.push('/mindfulness'),
     },
     {
       id: 'replacement',
@@ -142,8 +145,7 @@ export default function ToolsScreen() {
       description: 'Practica el ciclo: Pausa → Reemplaza → Redirige',
       icon: 'swap-horizontal-outline',
       color: '#FF9800',
-      action: () => Alert.alert('Reemplazo Activo (17 segundos)',
-        '1. PAUSA (2 seg)\n"Ahí está mi Etiqueta de Alarma vieja"\n\n2. REEMPLAZA (5 seg)\nDi tu Etiqueta Alternativa\n\n3. REDIRIGE (10 seg)\nVuelve a lo que estabas haciendo'),
+      action: () => setShowReplacementModal(true),
     },
     {
       id: 'grounding',
@@ -151,8 +153,15 @@ export default function ToolsScreen() {
       description: 'Técnica de conexión con el presente',
       icon: 'hand-left-outline',
       color: '#00BCD4',
-      action: () => Alert.alert('Anclaje 5-4-3-2-1',
-        'Nombra:\n\n5 cosas que PUEDES VER\n4 cosas que PUEDES TOCAR\n3 cosas que PUEDES OÍR\n2 cosas que PUEDES OLER\n1 cosa que PUEDES SABOREAR'),
+      action: () => setShowGroundingModal(true),
+    },
+    {
+      id: 'factors',
+      title: 'Factores Agravantes',
+      description: 'Registra sueño, cafeína, estrés y más',
+      icon: 'analytics-outline',
+      color: '#607D8B',
+      action: () => router.push('/factors'),
     },
     {
       id: 'exposure',
@@ -339,6 +348,120 @@ export default function ToolsScreen() {
             <TouchableOpacity style={styles.submitButton} onPress={handleABCSubmit}>
               <Text style={styles.submitButtonText}>Guardar Registro</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      {/* Replacement Modal */}
+      <Modal visible={showReplacementModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.breathingModal}>
+            <TouchableOpacity style={styles.closeButton} onPress={() => { setShowReplacementModal(false); setReplacementStep(0); }}>
+              <Ionicons name="close" size={24} color={COLORS.textSecondary} />
+            </TouchableOpacity>
+
+            <Text style={styles.breathingTitle}>Reemplazo Activo</Text>
+            <Text style={styles.replacementSubtitle}>17 segundos</Text>
+
+            {replacementStep === 0 && (
+              <View style={styles.replacementContent}>
+                <View style={[styles.replacementIcon, { backgroundColor: '#FF980020' }]}>
+                  <Ionicons name="pause-outline" size={40} color="#FF9800" />
+                </View>
+                <Text style={styles.replacementStepTitle}>1. PAUSA</Text>
+                <Text style={styles.replacementStepDesc}>"Ahí está mi Etiqueta de Alarma vieja"</Text>
+                <Text style={styles.replacementTime}>2 segundos</Text>
+              </View>
+            )}
+            {replacementStep === 1 && (
+              <View style={styles.replacementContent}>
+                <View style={[styles.replacementIcon, { backgroundColor: COLORS.primary + '20' }]}>
+                  <Ionicons name="swap-horizontal-outline" size={40} color={COLORS.primary} />
+                </View>
+                <Text style={styles.replacementStepTitle}>2. REEMPLAZA</Text>
+                <Text style={styles.replacementStepDesc}>Di tu Etiqueta Alternativa en voz alta o mental</Text>
+                <Text style={styles.replacementTime}>5 segundos</Text>
+              </View>
+            )}
+            {replacementStep === 2 && (
+              <View style={styles.replacementContent}>
+                <View style={[styles.replacementIcon, { backgroundColor: COLORS.success + '20' }]}>
+                  <Ionicons name="arrow-forward-outline" size={40} color={COLORS.success} />
+                </View>
+                <Text style={styles.replacementStepTitle}>3. REDIRIGE</Text>
+                <Text style={styles.replacementStepDesc}>Vuelve a lo que estabas haciendo</Text>
+                <Text style={styles.replacementTime}>10 segundos</Text>
+              </View>
+            )}
+
+            <View style={styles.replacementNav}>
+              {replacementStep > 0 && (
+                <TouchableOpacity style={styles.navButton} onPress={() => setReplacementStep(replacementStep - 1)}>
+                  <Ionicons name="arrow-back" size={18} color={COLORS.primary} />
+                  <Text style={styles.navButtonText}>Anterior</Text>
+                </TouchableOpacity>
+              )}
+              {replacementStep < 2 ? (
+                <TouchableOpacity style={[styles.navButton, styles.navButtonPrimary]} onPress={() => setReplacementStep(replacementStep + 1)}>
+                  <Text style={styles.navButtonTextPrimary}>Siguiente</Text>
+                  <Ionicons name="arrow-forward" size={18} color={COLORS.surface} />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={styles.doneButton} onPress={() => { setShowReplacementModal(false); setReplacementStep(0); }}>
+                  <Text style={styles.doneButtonText}>¡Listo!</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Grounding Modal */}
+      <Modal visible={showGroundingModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.breathingModal}>
+            <TouchableOpacity style={styles.closeButton} onPress={() => { setShowGroundingModal(false); setGroundingStep(0); }}>
+              <Ionicons name="close" size={24} color={COLORS.textSecondary} />
+            </TouchableOpacity>
+
+            <Text style={styles.breathingTitle}>Anclaje 5-4-3-2-1</Text>
+
+            {[
+              { count: 5, sense: 'VER', icon: 'eye-outline' as const, color: '#2196F3' },
+              { count: 4, sense: 'TOCAR', icon: 'hand-left-outline' as const, color: '#4CAF50' },
+              { count: 3, sense: 'OÍR', icon: 'ear-outline' as const, color: '#FF9800' },
+              { count: 2, sense: 'OLER', icon: 'flower-outline' as const, color: '#9C27B0' },
+              { count: 1, sense: 'SABOREAR', icon: 'restaurant-outline' as const, color: '#F44336' },
+            ].map((item, i) => (
+              groundingStep === i && (
+                <View key={i} style={styles.replacementContent}>
+                  <View style={[styles.replacementIcon, { backgroundColor: item.color + '20' }]}>
+                    <Ionicons name={item.icon} size={40} color={item.color} />
+                  </View>
+                  <Text style={styles.replacementStepTitle}>{item.count} cosas que puedes {item.sense}</Text>
+                  <Text style={styles.replacementStepDesc}>Nombra cada una en voz alta o mentalmente</Text>
+                  <Text style={[styles.groundingProgress]}>Paso {i + 1} de 5</Text>
+                </View>
+              )
+            ))}
+
+            <View style={styles.replacementNav}>
+              {groundingStep > 0 && (
+                <TouchableOpacity style={styles.navButton} onPress={() => setGroundingStep(groundingStep - 1)}>
+                  <Ionicons name="arrow-back" size={18} color={COLORS.primary} />
+                  <Text style={styles.navButtonText}>Anterior</Text>
+                </TouchableOpacity>
+              )}
+              {groundingStep < 4 ? (
+                <TouchableOpacity style={[styles.navButton, styles.navButtonPrimary]} onPress={() => setGroundingStep(groundingStep + 1)}>
+                  <Text style={styles.navButtonTextPrimary}>Siguiente</Text>
+                  <Ionicons name="arrow-forward" size={18} color={COLORS.surface} />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={styles.doneButton} onPress={() => { setShowGroundingModal(false); setGroundingStep(0); }}>
+                  <Text style={styles.doneButtonText}>¡Listo!</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         </View>
       </Modal>
@@ -592,5 +715,78 @@ const styles = StyleSheet.create({
     color: COLORS.surface,
     fontSize: 16,
     fontWeight: '600',
+  },
+  replacementSubtitle: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    marginTop: -8,
+    marginBottom: 16,
+  },
+  replacementContent: {
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  replacementIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  replacementStepTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.text,
+    textAlign: 'center',
+  },
+  replacementStepDesc: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginTop: 8,
+    paddingHorizontal: 16,
+    lineHeight: 20,
+  },
+  replacementTime: {
+    fontSize: 13,
+    color: COLORS.textLight,
+    marginTop: 12,
+  },
+  groundingProgress: {
+    fontSize: 13,
+    color: COLORS.textLight,
+    marginTop: 12,
+  },
+  replacementNav: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: 16,
+    width: '100%',
+  },
+  navButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  navButtonPrimary: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  navButtonText: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: '500',
+  },
+  navButtonTextPrimary: {
+    fontSize: 14,
+    color: COLORS.surface,
+    fontWeight: '500',
   },
 });

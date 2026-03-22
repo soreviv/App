@@ -40,6 +40,27 @@ export default function RootLayout() {
             presentation: 'card',
           }}
         />
+        <Stack.Screen
+          name="settings"
+          options={{
+            title: 'Configuración',
+            presentation: 'card',
+          }}
+        />
+        <Stack.Screen
+          name="factors"
+          options={{
+            title: 'Factores',
+            presentation: 'card',
+          }}
+        />
+        <Stack.Screen
+          name="mindfulness"
+          options={{
+            title: 'Mindfulness',
+            presentation: 'card',
+          }}
+        />
       </Stack>
     </>
   );

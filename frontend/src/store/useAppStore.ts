@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-constants';
-import { UserProgress, DailyLog, ABCRecord, ExposureLadder, EmergencyKitItem, QuestionnaireResponse } from '../types';
+import { UserProgress, DailyLog, ABCRecord, ExposureLadder, EmergencyKitItem, QuestionnaireResponse, FactorLog, MindfulnessSession, UserSettings } from '../types';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
@@ -58,6 +58,21 @@ interface AppState {
   // Questionnaire Actions
   submitQuestionnaire: (response: Omit<QuestionnaireResponse, 'id' | 'device_id' | 'total_score' | 'created_at'>) => Promise<void>;
   fetchQuestionnaireResponses: () => Promise<void>;
+
+  // Factor Log Actions
+  factorLogs: FactorLog[];
+  createFactorLog: (log: Omit<FactorLog, 'id' | 'device_id' | 'created_at'>) => Promise<void>;
+  fetchFactorLogs: () => Promise<void>;
+
+  // Mindfulness Session Actions
+  mindfulnessSessions: MindfulnessSession[];
+  createMindfulnessSession: (session: Omit<MindfulnessSession, 'id' | 'device_id' | 'created_at'>) => Promise<void>;
+  fetchMindfulnessSessions: () => Promise<void>;
+
+  // Settings Actions
+  settings: UserSettings | null;
+  fetchSettings: () => Promise<void>;
+  updateSettings: (update: Partial<UserSettings>) => Promise<void>;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -69,6 +84,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   exposureLadder: null,
   emergencyKit: [],
   questionnaireResponses: [],
+  factorLogs: [],
+  mindfulnessSessions: [],
+  settings: null,
   
   initialize: async () => {
     console.log('Initializing app...');
@@ -332,13 +350,104 @@ export const useAppStore = create<AppState>((set, get) => ({
   fetchQuestionnaireResponses: async () => {
     const { deviceId } = get();
     if (!deviceId) return;
-    
+
     try {
       const response = await fetch(`${API_URL}/api/questionnaire/${deviceId}`);
       const data = await response.json();
       set({ questionnaireResponses: data });
     } catch (error) {
       console.error('Failed to fetch questionnaire responses:', error);
+    }
+  },
+
+  // Factor Log Actions
+  createFactorLog: async (log) => {
+    const { deviceId } = get();
+    if (!deviceId) return;
+
+    try {
+      await fetch(`${API_URL}/api/factor-logs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...log, device_id: deviceId }),
+      });
+      await get().fetchFactorLogs();
+    } catch (error) {
+      console.error('Failed to create factor log:', error);
+    }
+  },
+
+  fetchFactorLogs: async () => {
+    const { deviceId } = get();
+    if (!deviceId) return;
+
+    try {
+      const response = await fetch(`${API_URL}/api/factor-logs/${deviceId}`);
+      const data = await response.json();
+      set({ factorLogs: data });
+    } catch (error) {
+      console.error('Failed to fetch factor logs:', error);
+    }
+  },
+
+  // Mindfulness Session Actions
+  createMindfulnessSession: async (session) => {
+    const { deviceId } = get();
+    if (!deviceId) return;
+
+    try {
+      await fetch(`${API_URL}/api/mindfulness-sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...session, device_id: deviceId }),
+      });
+      await get().fetchMindfulnessSessions();
+    } catch (error) {
+      console.error('Failed to create mindfulness session:', error);
+    }
+  },
+
+  fetchMindfulnessSessions: async () => {
+    const { deviceId } = get();
+    if (!deviceId) return;
+
+    try {
+      const response = await fetch(`${API_URL}/api/mindfulness-sessions/${deviceId}`);
+      const data = await response.json();
+      set({ mindfulnessSessions: data });
+    } catch (error) {
+      console.error('Failed to fetch mindfulness sessions:', error);
+    }
+  },
+
+  // Settings Actions
+  fetchSettings: async () => {
+    const { deviceId } = get();
+    if (!deviceId) return;
+
+    try {
+      const response = await fetch(`${API_URL}/api/settings/${deviceId}`);
+      const data = await response.json();
+      set({ settings: data });
+    } catch (error) {
+      console.error('Failed to fetch settings:', error);
+    }
+  },
+
+  updateSettings: async (update) => {
+    const { deviceId } = get();
+    if (!deviceId) return;
+
+    try {
+      const response = await fetch(`${API_URL}/api/settings/${deviceId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(update),
+      });
+      const data = await response.json();
+      set({ settings: data });
+    } catch (error) {
+      console.error('Failed to update settings:', error);
     }
   },
 }));
