@@ -2,75 +2,74 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserProgress, DailyLog, ABCRecord, ExposureLadder, EmergencyKitItem, QuestionnaireResponse, FactorLog, MindfulnessSession, UserSettings } from '../types';
 import { scheduleDailyReminder, cancelAllReminders } from '../utils/notifications';
+import { offlineFetch, flushQueue } from '../utils/offlineSync';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
-
-console.log(API_URL, 'EXPO_PUBLIC_BACKEND_URL');
 
 interface AppState {
   // Device ID
   deviceId: string | null;
   isLoading: boolean;
-  
+  pendingSyncs: number;
+
   // User Progress
   progress: UserProgress | null;
-  
+
   // Daily Logs
   dailyLogs: DailyLog[];
-  
+
   // ABC Records
   abcRecords: ABCRecord[];
-  
+
   // Exposure Ladder
   exposureLadder: ExposureLadder | null;
-  
+
   // Emergency Kit
   emergencyKit: EmergencyKitItem[];
-  
+
   // Questionnaire Responses
   questionnaireResponses: QuestionnaireResponse[];
-  
+
+  // Factor Logs
+  factorLogs: FactorLog[];
+
+  // Mindfulness Sessions
+  mindfulnessSessions: MindfulnessSession[];
+
+  // Settings
+  settings: UserSettings | null;
+
   // Actions
   initialize: () => Promise<void>;
+  syncPending: () => Promise<void>;
   fetchProgress: () => Promise<void>;
   updateProgress: (update: Partial<UserProgress>) => Promise<void>;
   completeChapter: (chapterId: number) => Promise<void>;
-  
-  // Daily Log Actions
+
   createDailyLog: (log: Omit<DailyLog, 'id' | 'device_id' | 'created_at'>) => Promise<void>;
   fetchDailyLogs: () => Promise<void>;
-  
-  // ABC Record Actions
+
   createABCRecord: (record: Omit<ABCRecord, 'id' | 'device_id' | 'created_at'>) => Promise<void>;
   fetchABCRecords: () => Promise<void>;
   updateABCRecord: (recordId: string, alternativeLabel: string, newIntensity: number) => Promise<void>;
-  
-  // Exposure Ladder Actions
+
   createExposureLadder: (steps: any[]) => Promise<void>;
   fetchExposureLadder: () => Promise<void>;
   addExposureAttempt: (stepNumber: number, attempt: any) => Promise<void>;
-  
-  // Emergency Kit Actions
+
   addEmergencyKitItem: (item: Omit<EmergencyKitItem, 'id' | 'device_id' | 'created_at'>) => Promise<void>;
   fetchEmergencyKit: () => Promise<void>;
   deleteEmergencyKitItem: (itemId: string) => Promise<void>;
-  
-  // Questionnaire Actions
+
   submitQuestionnaire: (response: Omit<QuestionnaireResponse, 'id' | 'device_id' | 'total_score' | 'created_at'>) => Promise<void>;
   fetchQuestionnaireResponses: () => Promise<void>;
 
-  // Factor Log Actions
-  factorLogs: FactorLog[];
   createFactorLog: (log: Omit<FactorLog, 'id' | 'device_id' | 'created_at'>) => Promise<void>;
   fetchFactorLogs: () => Promise<void>;
 
-  // Mindfulness Session Actions
-  mindfulnessSessions: MindfulnessSession[];
   createMindfulnessSession: (session: Omit<MindfulnessSession, 'id' | 'device_id' | 'created_at'>) => Promise<void>;
   fetchMindfulnessSessions: () => Promise<void>;
 
-  // Settings Actions
-  settings: UserSettings | null;
   fetchSettings: () => Promise<void>;
   updateSettings: (update: Partial<UserSettings>) => Promise<void>;
 }
@@ -78,6 +77,7 @@ interface AppState {
 export const useAppStore = create<AppState>((set, get) => ({
   deviceId: null,
   isLoading: true,
+  pendingSyncs: 0,
   progress: null,
   dailyLogs: [],
   abcRecords: [],
@@ -87,9 +87,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   factorLogs: [],
   mindfulnessSessions: [],
   settings: null,
-  
+
   initialize: async () => {
-    console.log('Initializing app...');
     try {
       let deviceId: string | null = null;
       try {
@@ -105,15 +104,14 @@ export const useAppStore = create<AppState>((set, get) => ({
           console.log('AsyncStorage setItem error:', e);
         }
       }
-      console.log('Device ID:', deviceId);
       set({ deviceId });
-      
-      // Fetch initial data
-      console.log('Fetching progress...');
+
+      // Flush any pending sync queue from previous offline session
+      await get().syncPending();
+
+      // Fetch initial data (all offline-aware with cache)
       await get().fetchProgress();
-      console.log('Fetching daily logs...');
       await get().fetchDailyLogs();
-      console.log('Fetching emergency kit...');
       await get().fetchEmergencyKit();
 
       // Restore notification schedule from settings
@@ -126,338 +124,289 @@ export const useAppStore = create<AppState>((set, get) => ({
         await cancelAllReminders();
       }
 
-      console.log('Initialization complete');
       set({ isLoading: false });
     } catch (error) {
       console.error('Failed to initialize:', error);
       set({ isLoading: false });
     }
   },
-  
+
+  syncPending: async () => {
+    const { synced, failed } = await flushQueue();
+    set({ pendingSyncs: failed });
+    if (synced > 0) {
+      // Refresh data after syncing
+      await get().fetchDailyLogs();
+      await get().fetchABCRecords();
+      await get().fetchEmergencyKit();
+      await get().fetchFactorLogs();
+      await get().fetchMindfulnessSessions();
+    }
+  },
+
+  // ============ PROGRESS ============
+
   fetchProgress: async () => {
     const { deviceId } = get();
     if (!deviceId) return;
-    
-    try {
-      const response = await fetch(`${API_URL}/api/progress`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ device_id: deviceId }),
-      });
-      const data = await response.json();
-      set({ progress: data });
-    } catch (error) {
-      console.error('Failed to fetch progress:', error);
-    }
+
+    const data = await offlineFetch<UserProgress>({
+      url: `${API_URL}/api/progress`,
+      method: 'POST',
+      body: { device_id: deviceId },
+      cacheKey: `progress:${deviceId}`,
+    });
+    if (data) set({ progress: data });
   },
-  
+
   updateProgress: async (update) => {
     const { deviceId } = get();
     if (!deviceId) return;
-    
-    try {
-      const response = await fetch(`${API_URL}/api/progress/${deviceId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(update),
-      });
-      const data = await response.json();
-      set({ progress: data });
-    } catch (error) {
-      console.error('Failed to update progress:', error);
-    }
+
+    const data = await offlineFetch<UserProgress>({
+      url: `${API_URL}/api/progress/${deviceId}`,
+      method: 'PUT',
+      body: update,
+    });
+    if (data) set({ progress: data });
   },
-  
+
   completeChapter: async (chapterId) => {
     const { deviceId } = get();
     if (!deviceId) return;
-    
-    try {
-      const response = await fetch(`${API_URL}/api/progress/${deviceId}/complete-chapter/${chapterId}`, {
-        method: 'POST',
-      });
-      const data = await response.json();
-      set({ progress: data });
-    } catch (error) {
-      console.error('Failed to complete chapter:', error);
-    }
+
+    const data = await offlineFetch<UserProgress>({
+      url: `${API_URL}/api/progress/${deviceId}/complete-chapter/${chapterId}`,
+      method: 'POST',
+    });
+    if (data) set({ progress: data });
   },
-  
+
+  // ============ DAILY LOGS ============
+
   createDailyLog: async (log) => {
     const { deviceId } = get();
     if (!deviceId) return;
-    
-    try {
-      await fetch(`${API_URL}/api/daily-logs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...log, device_id: deviceId }),
-      });
-      await get().fetchDailyLogs();
-    } catch (error) {
-      console.error('Failed to create daily log:', error);
-    }
+
+    await offlineFetch({
+      url: `${API_URL}/api/daily-logs`,
+      method: 'POST',
+      body: { ...log, device_id: deviceId },
+    });
+    await get().fetchDailyLogs();
   },
-  
+
   fetchDailyLogs: async () => {
     const { deviceId } = get();
     if (!deviceId) return;
-    
-    try {
-      const response = await fetch(`${API_URL}/api/daily-logs/${deviceId}`);
-      const data = await response.json();
-      set({ dailyLogs: data });
-    } catch (error) {
-      console.error('Failed to fetch daily logs:', error);
-    }
+
+    const data = await offlineFetch<DailyLog[]>({
+      url: `${API_URL}/api/daily-logs/${deviceId}`,
+      cacheKey: `daily-logs:${deviceId}`,
+    });
+    if (data) set({ dailyLogs: data });
   },
-  
+
+  // ============ ABC RECORDS ============
+
   createABCRecord: async (record) => {
     const { deviceId } = get();
     if (!deviceId) return;
-    
-    try {
-      await fetch(`${API_URL}/api/abc-records`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...record, device_id: deviceId }),
-      });
-      await get().fetchABCRecords();
-    } catch (error) {
-      console.error('Failed to create ABC record:', error);
-    }
+
+    await offlineFetch({
+      url: `${API_URL}/api/abc-records`,
+      method: 'POST',
+      body: { ...record, device_id: deviceId },
+    });
+    await get().fetchABCRecords();
   },
-  
+
   fetchABCRecords: async () => {
     const { deviceId } = get();
     if (!deviceId) return;
-    
-    try {
-      const response = await fetch(`${API_URL}/api/abc-records/${deviceId}`);
-      const data = await response.json();
-      set({ abcRecords: data });
-    } catch (error) {
-      console.error('Failed to fetch ABC records:', error);
-    }
+
+    const data = await offlineFetch<ABCRecord[]>({
+      url: `${API_URL}/api/abc-records/${deviceId}`,
+      cacheKey: `abc-records:${deviceId}`,
+    });
+    if (data) set({ abcRecords: data });
   },
-  
+
   updateABCRecord: async (recordId, alternativeLabel, newIntensity) => {
-    try {
-      await fetch(`${API_URL}/api/abc-records/${recordId}?alternative_label=${encodeURIComponent(alternativeLabel)}&new_intensity=${newIntensity}`, {
-        method: 'PUT',
-      });
-      await get().fetchABCRecords();
-    } catch (error) {
-      console.error('Failed to update ABC record:', error);
-    }
+    await offlineFetch({
+      url: `${API_URL}/api/abc-records/${recordId}?alternative_label=${encodeURIComponent(alternativeLabel)}&new_intensity=${newIntensity}`,
+      method: 'PUT',
+    });
+    await get().fetchABCRecords();
   },
-  
+
+  // ============ EXPOSURE LADDER ============
+
   createExposureLadder: async (steps) => {
     const { deviceId } = get();
     if (!deviceId) return;
-    
-    try {
-      const response = await fetch(`${API_URL}/api/exposure-ladder`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ device_id: deviceId, steps }),
-      });
-      const data = await response.json();
-      set({ exposureLadder: data });
-    } catch (error) {
-      console.error('Failed to create exposure ladder:', error);
-    }
+
+    const data = await offlineFetch<ExposureLadder>({
+      url: `${API_URL}/api/exposure-ladder`,
+      method: 'POST',
+      body: { device_id: deviceId, steps },
+    });
+    if (data) set({ exposureLadder: data });
   },
-  
+
   fetchExposureLadder: async () => {
     const { deviceId } = get();
     if (!deviceId) return;
-    
-    try {
-      const response = await fetch(`${API_URL}/api/exposure-ladder/${deviceId}`);
-      if (response.ok) {
-        const data = await response.json();
-        set({ exposureLadder: data });
-      }
-    } catch (error) {
-      console.error('Failed to fetch exposure ladder:', error);
-    }
+
+    const data = await offlineFetch<ExposureLadder>({
+      url: `${API_URL}/api/exposure-ladder/${deviceId}`,
+      cacheKey: `exposure-ladder:${deviceId}`,
+    });
+    if (data) set({ exposureLadder: data });
   },
-  
+
   addExposureAttempt: async (stepNumber, attempt) => {
     const { deviceId } = get();
     if (!deviceId) return;
-    
-    try {
-      const response = await fetch(`${API_URL}/api/exposure-ladder/${deviceId}/attempt`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ device_id: deviceId, step_number: stepNumber, ...attempt }),
-      });
-      const data = await response.json();
-      set({ exposureLadder: data });
-    } catch (error) {
-      console.error('Failed to add exposure attempt:', error);
-    }
+
+    const data = await offlineFetch<ExposureLadder>({
+      url: `${API_URL}/api/exposure-ladder/${deviceId}/attempt`,
+      method: 'POST',
+      body: { device_id: deviceId, step_number: stepNumber, ...attempt },
+    });
+    if (data) set({ exposureLadder: data });
   },
-  
+
+  // ============ EMERGENCY KIT ============
+
   addEmergencyKitItem: async (item) => {
     const { deviceId } = get();
     if (!deviceId) return;
-    
-    try {
-      await fetch(`${API_URL}/api/emergency-kit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...item, device_id: deviceId }),
-      });
-      await get().fetchEmergencyKit();
-    } catch (error) {
-      console.error('Failed to add emergency kit item:', error);
-    }
+
+    await offlineFetch({
+      url: `${API_URL}/api/emergency-kit`,
+      method: 'POST',
+      body: { ...item, device_id: deviceId },
+    });
+    await get().fetchEmergencyKit();
   },
-  
+
   fetchEmergencyKit: async () => {
     const { deviceId } = get();
     if (!deviceId) return;
-    
-    try {
-      const response = await fetch(`${API_URL}/api/emergency-kit/${deviceId}`);
-      const data = await response.json();
-      set({ emergencyKit: data });
-    } catch (error) {
-      console.error('Failed to fetch emergency kit:', error);
-    }
+
+    const data = await offlineFetch<EmergencyKitItem[]>({
+      url: `${API_URL}/api/emergency-kit/${deviceId}`,
+      cacheKey: `emergency-kit:${deviceId}`,
+    });
+    if (data) set({ emergencyKit: data });
   },
-  
+
   deleteEmergencyKitItem: async (itemId) => {
-    try {
-      await fetch(`${API_URL}/api/emergency-kit/${itemId}`, {
-        method: 'DELETE',
-      });
-      await get().fetchEmergencyKit();
-    } catch (error) {
-      console.error('Failed to delete emergency kit item:', error);
-    }
+    await offlineFetch({
+      url: `${API_URL}/api/emergency-kit/${itemId}`,
+      method: 'DELETE',
+    });
+    await get().fetchEmergencyKit();
   },
-  
+
+  // ============ QUESTIONNAIRE ============
+
   submitQuestionnaire: async (response) => {
     const { deviceId } = get();
     if (!deviceId) return;
-    
-    try {
-      await fetch(`${API_URL}/api/questionnaire`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...response, device_id: deviceId }),
-      });
-      await get().fetchQuestionnaireResponses();
-    } catch (error) {
-      console.error('Failed to submit questionnaire:', error);
-    }
+
+    await offlineFetch({
+      url: `${API_URL}/api/questionnaire`,
+      method: 'POST',
+      body: { ...response, device_id: deviceId },
+    });
+    await get().fetchQuestionnaireResponses();
   },
-  
+
   fetchQuestionnaireResponses: async () => {
     const { deviceId } = get();
     if (!deviceId) return;
 
-    try {
-      const response = await fetch(`${API_URL}/api/questionnaire/${deviceId}`);
-      const data = await response.json();
-      set({ questionnaireResponses: data });
-    } catch (error) {
-      console.error('Failed to fetch questionnaire responses:', error);
-    }
+    const data = await offlineFetch<QuestionnaireResponse[]>({
+      url: `${API_URL}/api/questionnaire/${deviceId}`,
+      cacheKey: `questionnaire:${deviceId}`,
+    });
+    if (data) set({ questionnaireResponses: data });
   },
 
-  // Factor Log Actions
+  // ============ FACTOR LOGS ============
+
   createFactorLog: async (log) => {
     const { deviceId } = get();
     if (!deviceId) return;
 
-    try {
-      await fetch(`${API_URL}/api/factor-logs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...log, device_id: deviceId }),
-      });
-      await get().fetchFactorLogs();
-    } catch (error) {
-      console.error('Failed to create factor log:', error);
-    }
+    await offlineFetch({
+      url: `${API_URL}/api/factor-logs`,
+      method: 'POST',
+      body: { ...log, device_id: deviceId },
+    });
+    await get().fetchFactorLogs();
   },
 
   fetchFactorLogs: async () => {
     const { deviceId } = get();
     if (!deviceId) return;
 
-    try {
-      const response = await fetch(`${API_URL}/api/factor-logs/${deviceId}`);
-      const data = await response.json();
-      set({ factorLogs: data });
-    } catch (error) {
-      console.error('Failed to fetch factor logs:', error);
-    }
+    const data = await offlineFetch<FactorLog[]>({
+      url: `${API_URL}/api/factor-logs/${deviceId}`,
+      cacheKey: `factor-logs:${deviceId}`,
+    });
+    if (data) set({ factorLogs: data });
   },
 
-  // Mindfulness Session Actions
+  // ============ MINDFULNESS SESSIONS ============
+
   createMindfulnessSession: async (session) => {
     const { deviceId } = get();
     if (!deviceId) return;
 
-    try {
-      await fetch(`${API_URL}/api/mindfulness-sessions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...session, device_id: deviceId }),
-      });
-      await get().fetchMindfulnessSessions();
-    } catch (error) {
-      console.error('Failed to create mindfulness session:', error);
-    }
+    await offlineFetch({
+      url: `${API_URL}/api/mindfulness-sessions`,
+      method: 'POST',
+      body: { ...session, device_id: deviceId },
+    });
+    await get().fetchMindfulnessSessions();
   },
 
   fetchMindfulnessSessions: async () => {
     const { deviceId } = get();
     if (!deviceId) return;
 
-    try {
-      const response = await fetch(`${API_URL}/api/mindfulness-sessions/${deviceId}`);
-      const data = await response.json();
-      set({ mindfulnessSessions: data });
-    } catch (error) {
-      console.error('Failed to fetch mindfulness sessions:', error);
-    }
+    const data = await offlineFetch<MindfulnessSession[]>({
+      url: `${API_URL}/api/mindfulness-sessions/${deviceId}`,
+      cacheKey: `mindfulness-sessions:${deviceId}`,
+    });
+    if (data) set({ mindfulnessSessions: data });
   },
 
-  // Settings Actions
+  // ============ SETTINGS ============
+
   fetchSettings: async () => {
     const { deviceId } = get();
     if (!deviceId) return;
 
-    try {
-      const response = await fetch(`${API_URL}/api/settings/${deviceId}`);
-      const data = await response.json();
-      set({ settings: data });
-    } catch (error) {
-      console.error('Failed to fetch settings:', error);
-    }
+    const data = await offlineFetch<UserSettings>({
+      url: `${API_URL}/api/settings/${deviceId}`,
+      cacheKey: `settings:${deviceId}`,
+    });
+    if (data) set({ settings: data });
   },
 
   updateSettings: async (update) => {
     const { deviceId } = get();
     if (!deviceId) return;
 
-    try {
-      const response = await fetch(`${API_URL}/api/settings/${deviceId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(update),
-      });
-      const data = await response.json();
-      set({ settings: data });
-    } catch (error) {
-      console.error('Failed to update settings:', error);
-    }
+    const data = await offlineFetch<UserSettings>({
+      url: `${API_URL}/api/settings/${deviceId}`,
+      method: 'PUT',
+      body: update,
+    });
+    if (data) set({ settings: data });
   },
 }));
