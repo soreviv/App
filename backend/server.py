@@ -5,11 +5,26 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field
-from typing import List, Optional
+from pydantic import BaseModel, Field, field_validator
+from typing import List, Literal, Optional
+import re
 import uuid
 from datetime import datetime, date
 from enum import Enum
+
+# Reusable date format validator
+DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+TIME_PATTERN = re.compile(r"^\d{2}:\d{2}$")
+
+def validate_date_format(v: str) -> str:
+    if not DATE_PATTERN.match(v):
+        raise ValueError("Formato de fecha debe ser YYYY-MM-DD")
+    # Verify it's a real date
+    try:
+        datetime.strptime(v, "%Y-%m-%d")
+    except ValueError:
+        raise ValueError("Fecha inválida")
+    return v
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -52,10 +67,10 @@ class UserProgressCreate(BaseModel):
     device_id: str
 
 class UserProgressUpdate(BaseModel):
-    current_week: Optional[int] = None
-    current_chapter: Optional[int] = None
+    current_week: Optional[int] = Field(None, ge=1, le=12)
+    current_chapter: Optional[int] = Field(None, ge=1, le=12)
     chapters_completed: Optional[List[int]] = None
-    initial_distress_score: Optional[int] = None
+    initial_distress_score: Optional[int] = Field(None, ge=0, le=10)
     commitment_signed: Optional[bool] = None
 
 # Daily Log Model
@@ -63,21 +78,26 @@ class DailyLog(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     device_id: str
     date: str  # YYYY-MM-DD format
-    distress_level: int  # 0-10
-    reflection: Optional[str] = None
+    distress_level: int = Field(ge=0, le=10)
+    reflection: Optional[str] = Field(None, max_length=2000)
     exercises_completed: List[str] = []
-    sleep_quality: Optional[int] = None  # 0-10
-    notes: Optional[str] = None
+    sleep_quality: Optional[int] = Field(None, ge=0, le=10)
+    notes: Optional[str] = Field(None, max_length=2000)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class DailyLogCreate(BaseModel):
     device_id: str
     date: str
-    distress_level: int
-    reflection: Optional[str] = None
+    distress_level: int = Field(ge=0, le=10)
+    reflection: Optional[str] = Field(None, max_length=2000)
     exercises_completed: List[str] = []
-    sleep_quality: Optional[int] = None
-    notes: Optional[str] = None
+    sleep_quality: Optional[int] = Field(None, ge=0, le=10)
+    notes: Optional[str] = Field(None, max_length=2000)
+
+    @field_validator("date")
+    @classmethod
+    def check_date(cls, v: str) -> str:
+        return validate_date_format(v)
 
 # ABC Record Model (for cognitive restructuring)
 class ABCRecord(BaseModel):
@@ -85,40 +105,45 @@ class ABCRecord(BaseModel):
     device_id: str
     date: str
     # A - Activator (Situation)
-    situation: str
-    time: Optional[str] = None
-    location: Optional[str] = None
+    situation: str = Field(max_length=2000)
+    time: Optional[str] = Field(None, max_length=50)
+    location: Optional[str] = Field(None, max_length=200)
     # B - Belief (Alarm Label)
-    alarm_label: str  # The automatic thought
+    alarm_label: str = Field(max_length=1000)
     # C - Consequence (Emotion/Action)
-    emotion: str
-    intensity: int  # 0-10
-    action_taken: Optional[str] = None
+    emotion: str = Field(max_length=200)
+    intensity: int = Field(ge=0, le=10)
+    action_taken: Optional[str] = Field(None, max_length=1000)
     # Alternative B (from Chapter 8)
-    alternative_label: Optional[str] = None
-    new_intensity: Optional[int] = None
+    alternative_label: Optional[str] = Field(None, max_length=1000)
+    new_intensity: Optional[int] = Field(None, ge=0, le=10)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class ABCRecordCreate(BaseModel):
     device_id: str
     date: str
-    situation: str
-    time: Optional[str] = None
-    location: Optional[str] = None
-    alarm_label: str
-    emotion: str
-    intensity: int
-    action_taken: Optional[str] = None
-    alternative_label: Optional[str] = None
-    new_intensity: Optional[int] = None
+    situation: str = Field(max_length=2000)
+    time: Optional[str] = Field(None, max_length=50)
+    location: Optional[str] = Field(None, max_length=200)
+    alarm_label: str = Field(max_length=1000)
+    emotion: str = Field(max_length=200)
+    intensity: int = Field(ge=0, le=10)
+    action_taken: Optional[str] = Field(None, max_length=1000)
+    alternative_label: Optional[str] = Field(None, max_length=1000)
+    new_intensity: Optional[int] = Field(None, ge=0, le=10)
+
+    @field_validator("date")
+    @classmethod
+    def check_date(cls, v: str) -> str:
+        return validate_date_format(v)
 
 # Exposure Ladder Model
 class ExposureStep(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    step_number: int  # 1-5
-    situation: str
-    anticipated_anxiety: int  # 0-10
-    attempts: List[dict] = []  # List of {date, initial_anxiety, final_anxiety, used_label, dominated}
+    step_number: int = Field(ge=1, le=5)
+    situation: str = Field(max_length=1000)
+    anticipated_anxiety: int = Field(ge=0, le=10)
+    attempts: List[dict] = []
     is_dominated: bool = False
 
 class ExposureLadder(BaseModel):
@@ -134,99 +159,121 @@ class ExposureLadderCreate(BaseModel):
 
 class ExposureAttempt(BaseModel):
     device_id: str
-    step_number: int
+    step_number: int = Field(ge=1, le=5)
     date: str
-    initial_anxiety: int
-    final_anxiety: int
+    initial_anxiety: int = Field(ge=0, le=10)
+    final_anxiety: int = Field(ge=0, le=10)
     used_label: bool
 
+    @field_validator("date")
+    @classmethod
+    def check_date(cls, v: str) -> str:
+        return validate_date_format(v)
+
 # Emergency Kit Model
+EmergencyCategory = Literal["alarm_signal", "containment_phrase", "rescue_action", "alternative_label", "custom"]
+
 class EmergencyKitItem(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     device_id: str
-    category: str  # "alarm_signal", "containment_phrase", "rescue_action", "alternative_label", "custom"
-    title: str
-    content: str
+    category: EmergencyCategory
+    title: str = Field(max_length=200)
+    content: str = Field(max_length=2000)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class EmergencyKitItemCreate(BaseModel):
     device_id: str
-    category: str
-    title: str
-    content: str
+    category: EmergencyCategory
+    title: str = Field(max_length=200)
+    content: str = Field(max_length=2000)
 
 # Aggravating Factors Log
 class FactorLog(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     device_id: str
     date: str
-    tinnitus_level: int  # 0-10
-    sleep_hours: Optional[float] = None
-    caffeine_cups: Optional[int] = None
-    alcohol_drinks: Optional[int] = None
-    stress_level: Optional[int] = None  # 0-10
-    exercise_minutes: Optional[int] = None
-    notes: Optional[str] = None
+    tinnitus_level: int = Field(ge=0, le=10)
+    sleep_hours: Optional[float] = Field(None, ge=0, le=24)
+    caffeine_cups: Optional[int] = Field(None, ge=0, le=50)
+    alcohol_drinks: Optional[int] = Field(None, ge=0, le=50)
+    stress_level: Optional[int] = Field(None, ge=0, le=10)
+    exercise_minutes: Optional[int] = Field(None, ge=0, le=1440)
+    notes: Optional[str] = Field(None, max_length=2000)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class FactorLogCreate(BaseModel):
     device_id: str
     date: str
-    tinnitus_level: int
-    sleep_hours: Optional[float] = None
-    caffeine_cups: Optional[int] = None
-    alcohol_drinks: Optional[int] = None
-    stress_level: Optional[int] = None
-    exercise_minutes: Optional[int] = None
-    notes: Optional[str] = None
+    tinnitus_level: int = Field(ge=0, le=10)
+    sleep_hours: Optional[float] = Field(None, ge=0, le=24)
+    caffeine_cups: Optional[int] = Field(None, ge=0, le=50)
+    alcohol_drinks: Optional[int] = Field(None, ge=0, le=50)
+    stress_level: Optional[int] = Field(None, ge=0, le=10)
+    exercise_minutes: Optional[int] = Field(None, ge=0, le=1440)
+    notes: Optional[str] = Field(None, max_length=2000)
+
+    @field_validator("date")
+    @classmethod
+    def check_date(cls, v: str) -> str:
+        return validate_date_format(v)
 
 # Mindfulness Session Log
 class MindfulnessSession(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     device_id: str
     date: str
-    time_of_day: str  # "morning" or "night"
+    time_of_day: Literal["morning", "night"]
     completed: bool
-    difficulty_level: int  # 1-10
-    observation: Optional[str] = None
+    difficulty_level: int = Field(ge=1, le=10)
+    observation: Optional[str] = Field(None, max_length=2000)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class MindfulnessSessionCreate(BaseModel):
     device_id: str
     date: str
-    time_of_day: str
+    time_of_day: Literal["morning", "night"]
     completed: bool
-    difficulty_level: int
-    observation: Optional[str] = None
+    difficulty_level: int = Field(ge=1, le=10)
+    observation: Optional[str] = Field(None, max_length=2000)
+
+    @field_validator("date")
+    @classmethod
+    def check_date(cls, v: str) -> str:
+        return validate_date_format(v)
 
 # Distress Questionnaire Response
 class QuestionnaireResponse(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     device_id: str
     date: str
-    week_number: int
+    week_number: int = Field(ge=1, le=12)
     # Questions A-G (0-4 scale each)
-    sleep_difficulty: int
-    concentration_interference: int
-    frustration_anger: int
-    social_impact: int
-    future_worry: int
-    relaxation_difficulty: int
-    overwhelm_despair: int
-    total_score: int
+    sleep_difficulty: int = Field(ge=0, le=4)
+    concentration_interference: int = Field(ge=0, le=4)
+    frustration_anger: int = Field(ge=0, le=4)
+    social_impact: int = Field(ge=0, le=4)
+    future_worry: int = Field(ge=0, le=4)
+    relaxation_difficulty: int = Field(ge=0, le=4)
+    overwhelm_despair: int = Field(ge=0, le=4)
+    total_score: int = Field(ge=0, le=28)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class QuestionnaireResponseCreate(BaseModel):
     device_id: str
     date: str
-    week_number: int
-    sleep_difficulty: int
-    concentration_interference: int
-    frustration_anger: int
-    social_impact: int
-    future_worry: int
-    relaxation_difficulty: int
-    overwhelm_despair: int
+    week_number: int = Field(ge=1, le=12)
+    sleep_difficulty: int = Field(ge=0, le=4)
+    concentration_interference: int = Field(ge=0, le=4)
+    frustration_anger: int = Field(ge=0, le=4)
+    social_impact: int = Field(ge=0, le=4)
+    future_worry: int = Field(ge=0, le=4)
+    relaxation_difficulty: int = Field(ge=0, le=4)
+    overwhelm_despair: int = Field(ge=0, le=4)
+
+    @field_validator("date")
+    @classmethod
+    def check_date(cls, v: str) -> str:
+        return validate_date_format(v)
 
 # Settings Model
 class UserSettings(BaseModel):
@@ -234,7 +281,7 @@ class UserSettings(BaseModel):
     device_id: str
     reminder_enabled: bool = True
     reminder_time: str = "09:00"  # HH:MM format
-    sound_masking_volume: int = 50  # 0-100
+    sound_masking_volume: int = Field(default=50, ge=0, le=100)
     preferred_sounds: List[str] = []
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
@@ -242,8 +289,15 @@ class UserSettings(BaseModel):
 class UserSettingsUpdate(BaseModel):
     reminder_enabled: Optional[bool] = None
     reminder_time: Optional[str] = None
-    sound_masking_volume: Optional[int] = None
+    sound_masking_volume: Optional[int] = Field(None, ge=0, le=100)
     preferred_sounds: Optional[List[str]] = None
+
+    @field_validator("reminder_time")
+    @classmethod
+    def check_reminder_time(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and not TIME_PATTERN.match(v):
+            raise ValueError("Formato de hora debe ser HH:MM")
+        return v
 
 # ============ ROUTES ============
 
