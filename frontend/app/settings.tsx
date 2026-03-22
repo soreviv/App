@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppStore } from '../src/store/useAppStore';
 import { COLORS } from '../src/utils/helpers';
+import { scheduleDailyReminder, cancelAllReminders, requestNotificationPermissions } from '../src/utils/notifications';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0'));
 const MINUTES = ['00', '15', '30', '45'];
@@ -38,6 +39,22 @@ export default function SettingsScreen() {
   }, [settings]);
 
   const handleSave = async () => {
+    // Schedule or cancel notification
+    if (reminderEnabled) {
+      const granted = await requestNotificationPermissions();
+      if (!granted) {
+        Alert.alert(
+          'Permisos necesarios',
+          'Para recibir recordatorios, necesitas permitir las notificaciones en la configuración de tu dispositivo.'
+        );
+        setReminderEnabled(false);
+        return;
+      }
+      await scheduleDailyReminder(parseInt(selectedHour), parseInt(selectedMinute));
+    } else {
+      await cancelAllReminders();
+    }
+
     await updateSettings({
       reminder_enabled: reminderEnabled,
       reminder_time: `${selectedHour}:${selectedMinute}`,

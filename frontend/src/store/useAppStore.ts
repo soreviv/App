@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserProgress, DailyLog, ABCRecord, ExposureLadder, EmergencyKitItem, QuestionnaireResponse, FactorLog, MindfulnessSession, UserSettings } from '../types';
+import { scheduleDailyReminder, cancelAllReminders } from '../utils/notifications';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
@@ -114,7 +115,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       await get().fetchDailyLogs();
       console.log('Fetching emergency kit...');
       await get().fetchEmergencyKit();
-      
+
+      // Restore notification schedule from settings
+      await get().fetchSettings();
+      const currentSettings = get().settings;
+      if (currentSettings?.reminder_enabled) {
+        const [h, m] = currentSettings.reminder_time.split(':');
+        await scheduleDailyReminder(parseInt(h), parseInt(m));
+      } else {
+        await cancelAllReminders();
+      }
+
       console.log('Initialization complete');
       set({ isLoading: false });
     } catch (error) {
