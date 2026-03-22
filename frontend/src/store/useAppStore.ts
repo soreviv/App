@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Crypto from 'expo-constants';
 import { UserProgress, DailyLog, ABCRecord, ExposureLadder, EmergencyKitItem, QuestionnaireResponse, FactorLog, MindfulnessSession, UserSettings } from '../types';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
@@ -178,7 +177,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!deviceId) return;
     
     try {
-      const response = await fetch(`${API_URL}/api/daily-logs`, {
+      await fetch(`${API_URL}/api/daily-logs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...log, device_id: deviceId }),

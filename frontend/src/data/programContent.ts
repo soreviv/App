@@ -1,4 +1,4 @@
-import { Week, Chapter } from '../types';
+import { Week } from '../types';
 
 export const PROGRAM_WEEKS: Week[] = [
   {

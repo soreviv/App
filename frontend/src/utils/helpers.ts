@@ -1,4 +1,4 @@
-import { format, parseISO, differenceInDays, addWeeks, startOfWeek } from 'date-fns';
+import { format, parseISO, differenceInDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 export const formatDate = (date: string | Date): string => {

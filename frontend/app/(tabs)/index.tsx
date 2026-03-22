@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,7 +16,7 @@ import { COLORS, getProgressPercentage, getTodayString, formatDate } from '../..
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { initialize, isLoading, progress, dailyLogs, createDailyLog, fetchDailyLogs } = useAppStore();
+  const { initialize, isLoading, progress, dailyLogs, createDailyLog } = useAppStore();
   const [todayDistress, setTodayDistress] = useState<number | null>(null);
   const [showDistressInput, setShowDistressInput] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
@@ -226,7 +225,7 @@ export default function HomeScreen() {
           <View style={styles.reminderContent}>
             <Text style={styles.reminderTitle}>Recordatorio Diario</Text>
             <Text style={styles.reminderText}>
-              La habituación toma tiempo. Cada día que practicas, tu cerebro se acerca más a reclasificar el tinnitus como "sonido neutro".
+              {'La habituación toma tiempo. Cada día que practicas, tu cerebro se acerca más a reclasificar el tinnitus como "sonido neutro".'}
             </Text>
           </View>
         </View>

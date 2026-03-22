@@ -27,7 +27,7 @@ interface Tool {
 
 export default function ToolsScreen() {
   const router = useRouter();
-  const { createABCRecord, createDailyLog, deviceId } = useAppStore();
+  const { createABCRecord } = useAppStore();
   const [showABCModal, setShowABCModal] = useState(false);
   const [showBreathingModal, setShowBreathingModal] = useState(false);
   const [showReplacementModal, setShowReplacementModal] = useState(false);
@@ -368,7 +368,7 @@ export default function ToolsScreen() {
                   <Ionicons name="pause-outline" size={40} color="#FF9800" />
                 </View>
                 <Text style={styles.replacementStepTitle}>1. PAUSA</Text>
-                <Text style={styles.replacementStepDesc}>"Ahí está mi Etiqueta de Alarma vieja"</Text>
+                <Text style={styles.replacementStepDesc}>{'"Ahí está mi Etiqueta de Alarma vieja"'}</Text>
                 <Text style={styles.replacementTime}>2 segundos</Text>
               </View>
             )}

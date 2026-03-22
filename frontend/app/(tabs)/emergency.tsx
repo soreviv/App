@@ -175,21 +175,21 @@ export default function EmergencyScreen() {
             <Ionicons name="bulb-outline" size={18} color={COLORS.warning} />
             <Text style={styles.suggestionText}>
               <Text style={styles.boldText}>Frase de contención: </Text>
-              "Esto es un pico, no una recaída. Es temporal."
+              {'"Esto es un pico, no una recaída. Es temporal."'}
             </Text>
           </View>
           <View style={styles.suggestionItem}>
             <Ionicons name="bulb-outline" size={18} color={COLORS.warning} />
             <Text style={styles.suggestionText}>
               <Text style={styles.boldText}>Acción de rescate: </Text>
-              "4 ciclos de respiración 4-6"
+              {'"4 ciclos de respiración 4-6"'}
             </Text>
           </View>
           <View style={styles.suggestionItem}>
             <Ionicons name="bulb-outline" size={18} color={COLORS.warning} />
             <Text style={styles.suggestionText}>
               <Text style={styles.boldText}>Señal de alarma: </Text>
-              "Tensión en el cuello y respiración acelerada"
+              {'"Tensión en el cuello y respiración acelerada"'}
             </Text>
           </View>
         </View>
