@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Crypto from 'expo-crypto';
 import { UserProgress, DailyLog, ABCRecord, ExposureLadder, EmergencyKitItem, QuestionnaireResponse, FactorLog, MindfulnessSession, UserSettings } from '../types';
 import { scheduleDailyReminder, cancelAllReminders } from '../utils/notifications';
 import { offlineFetch, flushQueue } from '../utils/offlineSync';
@@ -97,7 +98,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         console.log('AsyncStorage error, using fallback:', e);
       }
       if (!deviceId) {
-        deviceId = `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        deviceId = Crypto.randomUUID();
         try {
           await AsyncStorage.setItem('device_id', deviceId);
         } catch (e) {
@@ -233,8 +234,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   updateABCRecord: async (recordId, alternativeLabel, newIntensity) => {
+    const { deviceId } = get();
+    if (!deviceId) return;
     await offlineFetch({
-      url: `${API_URL}/api/abc-records/${recordId}?alternative_label=${encodeURIComponent(alternativeLabel)}&new_intensity=${newIntensity}`,
+      url: `${API_URL}/api/abc-records/${recordId}?device_id=${encodeURIComponent(deviceId)}&alternative_label=${encodeURIComponent(alternativeLabel)}&new_intensity=${newIntensity}`,
       method: 'PUT',
     });
     await get().fetchABCRecords();
@@ -303,8 +306,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   deleteEmergencyKitItem: async (itemId) => {
+    const { deviceId } = get();
+    if (!deviceId) return;
     await offlineFetch({
-      url: `${API_URL}/api/emergency-kit/${itemId}`,
+      url: `${API_URL}/api/emergency-kit/${itemId}?device_id=${encodeURIComponent(deviceId)}`,
       method: 'DELETE',
     });
     await get().fetchEmergencyKit();

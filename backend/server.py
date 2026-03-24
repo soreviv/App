@@ -418,9 +418,9 @@ async def get_abc_records(device_id: str, limit: int = 50):
     return [ABCRecord(**r) for r in records]
 
 @api_router.put("/abc-records/{record_id}")
-async def update_abc_record(record_id: str, alternative_label: str, new_intensity: int):
+async def update_abc_record(record_id: str, device_id: str, alternative_label: str, new_intensity: int):
     result = await db.abc_records.find_one_and_update(
-        {"id": record_id},
+        {"id": record_id, "device_id": device_id},
         {"$set": {"alternative_label": alternative_label, "new_intensity": new_intensity}},
         return_document=True
     )
@@ -497,8 +497,8 @@ async def get_emergency_kit(device_id: str):
     return [EmergencyKitItem(**item) for item in items]
 
 @api_router.delete("/emergency-kit/{item_id}")
-async def delete_emergency_kit_item(item_id: str):
-    result = await db.emergency_kit.delete_one({"id": item_id})
+async def delete_emergency_kit_item(item_id: str, device_id: str):
+    result = await db.emergency_kit.delete_one({"id": item_id, "device_id": device_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Item not found")
     return {"status": "deleted"}
