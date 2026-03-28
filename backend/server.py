@@ -137,6 +137,10 @@ class ABCRecordCreate(BaseModel):
     def check_date(cls, v: str) -> str:
         return validate_date_format(v)
 
+class ABCRecordUpdate(BaseModel):
+    device_id: str
+    alternative_label: str = Field(max_length=1000)
+    new_intensity: int = Field(ge=0, le=10)
 # Exposure Ladder Model
 class ExposureStep(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -417,11 +421,16 @@ async def get_abc_records(device_id: str, limit: int = 50):
     ).sort("created_at", -1).limit(limit).to_list(limit)
     return [ABCRecord(**r) for r in records]
 
-@api_router.put("/abc-records/{record_id}")
-async def update_abc_record(record_id: str, alternative_label: str, new_intensity: int):
+@api_router.put("/abc-records/{record_id}", response_model=ABCRecord)
+async def update_abc_record(record_id: str, update: ABCRecordUpdate):
+    # Security: Verify both record_id AND device_id to prevent IDOR
+    # and use request body to avoid sensitive data in logs
     result = await db.abc_records.find_one_and_update(
-        {"id": record_id},
-        {"$set": {"alternative_label": alternative_label, "new_intensity": new_intensity}},
+        {"id": record_id, "device_id": update.device_id},
+        {"$set": {
+            "alternative_label": update.alternative_label,
+            "new_intensity": update.new_intensity
+        }},
         return_document=True
     )
     if not result:
@@ -497,8 +506,9 @@ async def get_emergency_kit(device_id: str):
     return [EmergencyKitItem(**item) for item in items]
 
 @api_router.delete("/emergency-kit/{item_id}")
-async def delete_emergency_kit_item(item_id: str):
-    result = await db.emergency_kit.delete_one({"id": item_id})
+async def delete_emergency_kit_item(item_id: str, device_id: str):
+    # Security: Verify both item_id AND device_id to prevent IDOR
+    result = await db.emergency_kit.delete_one({"id": item_id, "device_id": device_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Item not found")
     return {"status": "deleted"}

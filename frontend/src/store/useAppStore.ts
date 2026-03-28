@@ -233,9 +233,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   updateABCRecord: async (recordId, alternativeLabel, newIntensity) => {
+    const { deviceId } = get();
+    if (!deviceId) return;
+
     await offlineFetch({
-      url: `${API_URL}/api/abc-records/${recordId}?alternative_label=${encodeURIComponent(alternativeLabel)}&new_intensity=${newIntensity}`,
+      url: `${API_URL}/api/abc-records/${recordId}`,
       method: 'PUT',
+      body: {
+        device_id: deviceId,
+        alternative_label: alternativeLabel,
+        new_intensity: newIntensity
+      },
     });
     await get().fetchABCRecords();
   },
@@ -303,8 +311,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   deleteEmergencyKitItem: async (itemId) => {
+    const { deviceId } = get();
+    if (!deviceId) return;
+
     await offlineFetch({
-      url: `${API_URL}/api/emergency-kit/${itemId}`,
+      url: `${API_URL}/api/emergency-kit/${itemId}?device_id=${deviceId}`,
       method: 'DELETE',
     });
     await get().fetchEmergencyKit();
