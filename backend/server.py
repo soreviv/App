@@ -99,6 +99,11 @@ class DailyLogCreate(BaseModel):
     def check_date(cls, v: str) -> str:
         return validate_date_format(v)
 
+class ABCRecordUpdate(BaseModel):
+    device_id: str
+    alternative_label: str = Field(max_length=1000)
+    new_intensity: int = Field(ge=0, le=10)
+
 # ABC Record Model (for cognitive restructuring)
 class ABCRecord(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -180,6 +185,9 @@ class EmergencyKitItem(BaseModel):
     title: str = Field(max_length=200)
     content: str = Field(max_length=2000)
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class DeleteRequest(BaseModel):
+    device_id: str
 
 class EmergencyKitItemCreate(BaseModel):
     device_id: str
@@ -418,10 +426,14 @@ async def get_abc_records(device_id: str, limit: int = 50):
     return [ABCRecord(**r) for r in records]
 
 @api_router.put("/abc-records/{record_id}")
-async def update_abc_record(record_id: str, device_id: str, alternative_label: str, new_intensity: int):
+async def update_abc_record(record_id: str, update: ABCRecordUpdate):
+    # Security: Using request body for device_id to avoid exposure in server access logs
     result = await db.abc_records.find_one_and_update(
-        {"id": record_id, "device_id": device_id},
-        {"$set": {"alternative_label": alternative_label, "new_intensity": new_intensity}},
+        {"id": record_id, "device_id": update.device_id},
+        {"$set": {
+            "alternative_label": update.alternative_label,
+            "new_intensity": update.new_intensity
+        }},
         return_document=True
     )
     if not result:
@@ -497,8 +509,9 @@ async def get_emergency_kit(device_id: str):
     return [EmergencyKitItem(**item) for item in items]
 
 @api_router.delete("/emergency-kit/{item_id}")
-async def delete_emergency_kit_item(item_id: str, device_id: str):
-    result = await db.emergency_kit.delete_one({"id": item_id, "device_id": device_id})
+async def delete_emergency_kit_item(item_id: str, delete_req: DeleteRequest):
+    # Security: Using request body for device_id to avoid exposure in server access logs
+    result = await db.emergency_kit.delete_one({"id": item_id, "device_id": delete_req.device_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Item not found")
     return {"status": "deleted"}
