@@ -96,6 +96,13 @@ interface OfflineFetchOptions {
 
 export async function offlineFetch<T>(options: OfflineFetchOptions): Promise<T | null> {
   const { url, method = 'GET', headers = { 'Content-Type': 'application/json' }, body, cacheKey } = options;
+
+  // Automatically inject X-Device-ID from storage if available
+  const deviceId = await AsyncStorage.getItem('device_id');
+  if (deviceId) {
+    headers['X-Device-ID'] = deviceId;
+  }
+
   const bodyStr = body ? JSON.stringify(body) : undefined;
 
   try {

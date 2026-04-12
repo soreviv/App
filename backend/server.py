@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi import FastAPI, APIRouter, HTTPException, Header, Depends
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -63,9 +63,6 @@ class UserProgress(BaseModel):
     commitment_signed: bool = False
     commitment_date: Optional[datetime] = None
 
-class UserProgressCreate(BaseModel):
-    device_id: str
-
 class UserProgressUpdate(BaseModel):
     current_week: Optional[int] = Field(None, ge=1, le=12)
     current_chapter: Optional[int] = Field(None, ge=1, le=12)
@@ -86,7 +83,6 @@ class DailyLog(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class DailyLogCreate(BaseModel):
-    device_id: str
     date: str
     distress_level: int = Field(ge=0, le=10)
     reflection: Optional[str] = Field(None, max_length=2000)
@@ -100,7 +96,6 @@ class DailyLogCreate(BaseModel):
         return validate_date_format(v)
 
 class ABCRecordUpdate(BaseModel):
-    device_id: str
     alternative_label: str = Field(max_length=1000)
     new_intensity: int = Field(ge=0, le=10)
 
@@ -125,7 +120,6 @@ class ABCRecord(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class ABCRecordCreate(BaseModel):
-    device_id: str
     date: str
     situation: str = Field(max_length=2000)
     time: Optional[str] = Field(None, max_length=50)
@@ -142,10 +136,6 @@ class ABCRecordCreate(BaseModel):
     def check_date(cls, v: str) -> str:
         return validate_date_format(v)
 
-class ABCRecordUpdate(BaseModel):
-    device_id: str
-    alternative_label: str = Field(max_length=1000)
-    new_intensity: int = Field(ge=0, le=10)
 # Exposure Ladder Model
 class ExposureStep(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -163,11 +153,9 @@ class ExposureLadder(BaseModel):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 class ExposureLadderCreate(BaseModel):
-    device_id: str
     steps: List[dict]
 
 class ExposureAttempt(BaseModel):
-    device_id: str
     step_number: int = Field(ge=1, le=5)
     date: str
     initial_anxiety: int = Field(ge=0, le=10)
@@ -194,7 +182,6 @@ class DeleteRequest(BaseModel):
     device_id: str
 
 class EmergencyKitItemCreate(BaseModel):
-    device_id: str
     category: EmergencyCategory
     title: str = Field(max_length=200)
     content: str = Field(max_length=2000)
@@ -214,7 +201,6 @@ class FactorLog(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class FactorLogCreate(BaseModel):
-    device_id: str
     date: str
     tinnitus_level: int = Field(ge=0, le=10)
     sleep_hours: Optional[float] = Field(None, ge=0, le=24)
@@ -241,7 +227,6 @@ class MindfulnessSession(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class MindfulnessSessionCreate(BaseModel):
-    device_id: str
     date: str
     time_of_day: Literal["morning", "night"]
     completed: bool
@@ -271,7 +256,6 @@ class QuestionnaireResponse(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class QuestionnaireResponseCreate(BaseModel):
-    device_id: str
     date: str
     week_number: int = Field(ge=1, le=12)
     sleep_difficulty: int = Field(ge=0, le=4)
@@ -311,6 +295,11 @@ class UserSettingsUpdate(BaseModel):
             raise ValueError("Formato de hora debe ser HH:MM")
         return v
 
+# ============ DEPENDENCIES ============
+
+async def require_device_id(x_device_id: str = Header(...)):
+    return x_device_id
+
 # ============ ROUTES ============
 
 @api_router.get("/")
@@ -331,23 +320,23 @@ async def get_status_checks():
 
 # User Progress Routes
 @api_router.post("/progress", response_model=UserProgress)
-async def create_or_get_progress(input: UserProgressCreate):
-    existing = await db.user_progress.find_one({"device_id": input.device_id})
+async def create_or_get_progress(device_id: str = Depends(require_device_id)):
+    existing = await db.user_progress.find_one({"device_id": device_id})
     if existing:
         return UserProgress(**existing)
-    progress = UserProgress(device_id=input.device_id)
+    progress = UserProgress(device_id=device_id)
     await db.user_progress.insert_one(progress.dict())
     return progress
 
-@api_router.get("/progress/{device_id}", response_model=UserProgress)
-async def get_progress(device_id: str):
+@api_router.get("/progress", response_model=UserProgress)
+async def get_progress(device_id: str = Depends(require_device_id)):
     progress = await db.user_progress.find_one({"device_id": device_id})
     if not progress:
         raise HTTPException(status_code=404, detail="Progress not found")
     return UserProgress(**progress)
 
-@api_router.put("/progress/{device_id}", response_model=UserProgress)
-async def update_progress(device_id: str, update: UserProgressUpdate):
+@api_router.put("/progress", response_model=UserProgress)
+async def update_progress(update: UserProgressUpdate, device_id: str = Depends(require_device_id)):
     update_dict = {k: v for k, v in update.dict().items() if v is not None}
     update_dict["last_active"] = datetime.utcnow()
     
@@ -363,8 +352,8 @@ async def update_progress(device_id: str, update: UserProgressUpdate):
         raise HTTPException(status_code=404, detail="Progress not found")
     return UserProgress(**result)
 
-@api_router.post("/progress/{device_id}/complete-chapter/{chapter_id}")
-async def complete_chapter(device_id: str, chapter_id: int):
+@api_router.post("/progress/complete-chapter/{chapter_id}")
+async def complete_chapter(chapter_id: int, device_id: str = Depends(require_device_id)):
     result = await db.user_progress.find_one_and_update(
         {"device_id": device_id},
         {
@@ -379,37 +368,39 @@ async def complete_chapter(device_id: str, chapter_id: int):
 
 # Daily Log Routes
 @api_router.post("/daily-logs", response_model=DailyLog)
-async def create_daily_log(input: DailyLogCreate):
+async def create_daily_log(input: DailyLogCreate, device_id: str = Depends(require_device_id)):
     # Check if log exists for this date
     existing = await db.daily_logs.find_one({
-        "device_id": input.device_id,
+        "device_id": device_id,
         "date": input.date
     })
     if existing:
         # Update existing
         update_dict = input.dict()
-        del update_dict["device_id"]
+        if "device_id" in update_dict: del update_dict["device_id"]
         del update_dict["date"]
         result = await db.daily_logs.find_one_and_update(
-            {"device_id": input.device_id, "date": input.date},
+            {"device_id": device_id, "date": input.date},
             {"$set": update_dict},
             return_document=True
         )
         return DailyLog(**result)
     
-    log = DailyLog(**input.dict())
+    log_dict = input.dict()
+    log_dict["device_id"] = device_id
+    log = DailyLog(**log_dict)
     await db.daily_logs.insert_one(log.dict())
     return log
 
-@api_router.get("/daily-logs/{device_id}", response_model=List[DailyLog])
-async def get_daily_logs(device_id: str, limit: int = 30):
+@api_router.get("/daily-logs", response_model=List[DailyLog])
+async def get_daily_logs(limit: int = 30, device_id: str = Depends(require_device_id)):
     logs = await db.daily_logs.find(
         {"device_id": device_id}
     ).sort("date", -1).limit(limit).to_list(limit)
     return [DailyLog(**log) for log in logs]
 
-@api_router.get("/daily-logs/{device_id}/{date}", response_model=DailyLog)
-async def get_daily_log_by_date(device_id: str, date: str):
+@api_router.get("/daily-logs/{date}", response_model=DailyLog)
+async def get_daily_log_by_date(date: str, device_id: str = Depends(require_device_id)):
     log = await db.daily_logs.find_one({"device_id": device_id, "date": date})
     if not log:
         raise HTTPException(status_code=404, detail="Log not found")
@@ -417,24 +408,25 @@ async def get_daily_log_by_date(device_id: str, date: str):
 
 # ABC Record Routes
 @api_router.post("/abc-records", response_model=ABCRecord)
-async def create_abc_record(input: ABCRecordCreate):
-    record = ABCRecord(**input.dict())
+async def create_abc_record(input: ABCRecordCreate, device_id: str = Depends(require_device_id)):
+    record_dict = input.dict()
+    record_dict["device_id"] = device_id
+    record = ABCRecord(**record_dict)
     await db.abc_records.insert_one(record.dict())
     return record
 
-@api_router.get("/abc-records/{device_id}", response_model=List[ABCRecord])
-async def get_abc_records(device_id: str, limit: int = 50):
+@api_router.get("/abc-records", response_model=List[ABCRecord])
+async def get_abc_records(limit: int = 50, device_id: str = Depends(require_device_id)):
     records = await db.abc_records.find(
         {"device_id": device_id}
     ).sort("created_at", -1).limit(limit).to_list(limit)
     return [ABCRecord(**r) for r in records]
 
-@api_router.put("/abc-records/{record_id}", response_model=ABCRecord)
-async def update_abc_record(record_id: str, update: ABCRecordUpdate):
-    # Security: Verify both record_id AND device_id to prevent IDOR
-    # and use request body to avoid sensitive data in logs
+@api_router.put("/abc-records/{record_id}")
+async def update_abc_record(record_id: str, update: ABCRecordUpdate, device_id: str = Depends(require_device_id)):
+    # Security: Using header for device_id to avoid exposure in server access logs
     result = await db.abc_records.find_one_and_update(
-        {"id": record_id, "device_id": update.device_id},
+        {"id": record_id, "device_id": device_id},
         {"$set": {
             "alternative_label": update.alternative_label,
             "new_intensity": update.new_intensity
@@ -447,32 +439,32 @@ async def update_abc_record(record_id: str, update: ABCRecordUpdate):
 
 # Exposure Ladder Routes
 @api_router.post("/exposure-ladder", response_model=ExposureLadder)
-async def create_exposure_ladder(input: ExposureLadderCreate):
-    existing = await db.exposure_ladders.find_one({"device_id": input.device_id})
+async def create_exposure_ladder(input: ExposureLadderCreate, device_id: str = Depends(require_device_id)):
+    existing = await db.exposure_ladders.find_one({"device_id": device_id})
     if existing:
         # Update existing
         steps = [ExposureStep(**s) for s in input.steps]
         result = await db.exposure_ladders.find_one_and_update(
-            {"device_id": input.device_id},
+            {"device_id": device_id},
             {"$set": {"steps": [s.dict() for s in steps], "updated_at": datetime.utcnow()}},
             return_document=True
         )
         return ExposureLadder(**result)
     
     steps = [ExposureStep(**s) for s in input.steps]
-    ladder = ExposureLadder(device_id=input.device_id, steps=[s.dict() for s in steps])
+    ladder = ExposureLadder(device_id=device_id, steps=[s.dict() for s in steps])
     await db.exposure_ladders.insert_one(ladder.dict())
     return ladder
 
-@api_router.get("/exposure-ladder/{device_id}", response_model=ExposureLadder)
-async def get_exposure_ladder(device_id: str):
+@api_router.get("/exposure-ladder", response_model=ExposureLadder)
+async def get_exposure_ladder(device_id: str = Depends(require_device_id)):
     ladder = await db.exposure_ladders.find_one({"device_id": device_id})
     if not ladder:
         raise HTTPException(status_code=404, detail="Ladder not found")
     return ExposureLadder(**ladder)
 
-@api_router.post("/exposure-ladder/{device_id}/attempt")
-async def add_exposure_attempt(device_id: str, attempt: ExposureAttempt):
+@api_router.post("/exposure-ladder/attempt")
+async def add_exposure_attempt(attempt: ExposureAttempt, device_id: str = Depends(require_device_id)):
     ladder = await db.exposure_ladders.find_one({"device_id": device_id})
     if not ladder:
         raise HTTPException(status_code=404, detail="Ladder not found")
@@ -503,19 +495,21 @@ async def add_exposure_attempt(device_id: str, attempt: ExposureAttempt):
 
 # Emergency Kit Routes
 @api_router.post("/emergency-kit", response_model=EmergencyKitItem)
-async def create_emergency_kit_item(input: EmergencyKitItemCreate):
-    item = EmergencyKitItem(**input.dict())
+async def create_emergency_kit_item(input: EmergencyKitItemCreate, device_id: str = Depends(require_device_id)):
+    item_dict = input.dict()
+    item_dict["device_id"] = device_id
+    item = EmergencyKitItem(**item_dict)
     await db.emergency_kit.insert_one(item.dict())
     return item
 
-@api_router.get("/emergency-kit/{device_id}", response_model=List[EmergencyKitItem])
-async def get_emergency_kit(device_id: str):
+@api_router.get("/emergency-kit", response_model=List[EmergencyKitItem])
+async def get_emergency_kit(device_id: str = Depends(require_device_id)):
     items = await db.emergency_kit.find({"device_id": device_id}).to_list(100)
     return [EmergencyKitItem(**item) for item in items]
 
 @api_router.delete("/emergency-kit/{item_id}")
-async def delete_emergency_kit_item(item_id: str, device_id: str):
-    # Security: Verify both item_id AND device_id to prevent IDOR
+async def delete_emergency_kit_item(item_id: str, device_id: str = Depends(require_device_id)):
+    # Security: Using header for device_id to avoid exposure in server access logs
     result = await db.emergency_kit.delete_one({"id": item_id, "device_id": device_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -523,28 +517,30 @@ async def delete_emergency_kit_item(item_id: str, device_id: str):
 
 # Factor Log Routes
 @api_router.post("/factor-logs", response_model=FactorLog)
-async def create_factor_log(input: FactorLogCreate):
+async def create_factor_log(input: FactorLogCreate, device_id: str = Depends(require_device_id)):
     existing = await db.factor_logs.find_one({
-        "device_id": input.device_id,
+        "device_id": device_id,
         "date": input.date
     })
     if existing:
         update_dict = input.dict()
-        del update_dict["device_id"]
+        if "device_id" in update_dict: del update_dict["device_id"]
         del update_dict["date"]
         result = await db.factor_logs.find_one_and_update(
-            {"device_id": input.device_id, "date": input.date},
+            {"device_id": device_id, "date": input.date},
             {"$set": update_dict},
             return_document=True
         )
         return FactorLog(**result)
     
-    log = FactorLog(**input.dict())
+    log_dict = input.dict()
+    log_dict["device_id"] = device_id
+    log = FactorLog(**log_dict)
     await db.factor_logs.insert_one(log.dict())
     return log
 
-@api_router.get("/factor-logs/{device_id}", response_model=List[FactorLog])
-async def get_factor_logs(device_id: str, limit: int = 14):
+@api_router.get("/factor-logs", response_model=List[FactorLog])
+async def get_factor_logs(limit: int = 14, device_id: str = Depends(require_device_id)):
     logs = await db.factor_logs.find(
         {"device_id": device_id}
     ).sort("date", -1).limit(limit).to_list(limit)
@@ -552,13 +548,15 @@ async def get_factor_logs(device_id: str, limit: int = 14):
 
 # Mindfulness Session Routes
 @api_router.post("/mindfulness-sessions", response_model=MindfulnessSession)
-async def create_mindfulness_session(input: MindfulnessSessionCreate):
-    session = MindfulnessSession(**input.dict())
+async def create_mindfulness_session(input: MindfulnessSessionCreate, device_id: str = Depends(require_device_id)):
+    session_dict = input.dict()
+    session_dict["device_id"] = device_id
+    session = MindfulnessSession(**session_dict)
     await db.mindfulness_sessions.insert_one(session.dict())
     return session
 
-@api_router.get("/mindfulness-sessions/{device_id}", response_model=List[MindfulnessSession])
-async def get_mindfulness_sessions(device_id: str, limit: int = 14):
+@api_router.get("/mindfulness-sessions", response_model=List[MindfulnessSession])
+async def get_mindfulness_sessions(limit: int = 14, device_id: str = Depends(require_device_id)):
     sessions = await db.mindfulness_sessions.find(
         {"device_id": device_id}
     ).sort("date", -1).limit(limit).to_list(limit)
@@ -566,7 +564,7 @@ async def get_mindfulness_sessions(device_id: str, limit: int = 14):
 
 # Questionnaire Routes
 @api_router.post("/questionnaire", response_model=QuestionnaireResponse)
-async def create_questionnaire_response(input: QuestionnaireResponseCreate):
+async def create_questionnaire_response(input: QuestionnaireResponseCreate, device_id: str = Depends(require_device_id)):
     total_score = (
         input.sleep_difficulty +
         input.concentration_interference +
@@ -580,19 +578,21 @@ async def create_questionnaire_response(input: QuestionnaireResponseCreate):
         **input.dict(),
         total_score=total_score
     )
-    await db.questionnaire_responses.insert_one(response.dict())
+    response_dict = response.dict()
+    response_dict["device_id"] = device_id
+    await db.questionnaire_responses.insert_one(response_dict)
     return response
 
-@api_router.get("/questionnaire/{device_id}", response_model=List[QuestionnaireResponse])
-async def get_questionnaire_responses(device_id: str):
+@api_router.get("/questionnaire", response_model=List[QuestionnaireResponse])
+async def get_questionnaire_responses(device_id: str = Depends(require_device_id)):
     responses = await db.questionnaire_responses.find(
         {"device_id": device_id}
     ).sort("week_number", 1).to_list(20)
     return [QuestionnaireResponse(**r) for r in responses]
 
 # Settings Routes
-@api_router.get("/settings/{device_id}", response_model=UserSettings)
-async def get_settings(device_id: str):
+@api_router.get("/settings", response_model=UserSettings)
+async def get_settings(device_id: str = Depends(require_device_id)):
     settings = await db.user_settings.find_one({"device_id": device_id})
     if not settings:
         # Create default settings
@@ -601,8 +601,8 @@ async def get_settings(device_id: str):
         return new_settings
     return UserSettings(**settings)
 
-@api_router.put("/settings/{device_id}", response_model=UserSettings)
-async def update_settings(device_id: str, update: UserSettingsUpdate):
+@api_router.put("/settings", response_model=UserSettings)
+async def update_settings(update: UserSettingsUpdate, device_id: str = Depends(require_device_id)):
     update_dict = {k: v for k, v in update.dict().items() if v is not None}
     update_dict["updated_at"] = datetime.utcnow()
     
