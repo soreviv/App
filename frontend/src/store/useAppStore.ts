@@ -154,7 +154,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     const data = await offlineFetch<UserProgress>({
       url: `${API_URL}/api/progress`,
       method: 'POST',
-      body: { device_id: deviceId },
       cacheKey: `progress:${deviceId}`,
     });
     if (data) set({ progress: data });
@@ -165,7 +164,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!deviceId) return;
 
     const data = await offlineFetch<UserProgress>({
-      url: `${API_URL}/api/progress/${deviceId}`,
+      url: `${API_URL}/api/progress`,
       method: 'PUT',
       body: update,
     });
@@ -177,7 +176,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!deviceId) return;
 
     const data = await offlineFetch<UserProgress>({
-      url: `${API_URL}/api/progress/${deviceId}/complete-chapter/${chapterId}`,
+      url: `${API_URL}/api/progress/complete-chapter/${chapterId}`,
       method: 'POST',
     });
     if (data) set({ progress: data });
@@ -192,7 +191,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     await offlineFetch({
       url: `${API_URL}/api/daily-logs`,
       method: 'POST',
-      body: { ...log, device_id: deviceId },
+      body: log,
     });
     await get().fetchDailyLogs();
   },
@@ -202,7 +201,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!deviceId) return;
 
     const data = await offlineFetch<DailyLog[]>({
-      url: `${API_URL}/api/daily-logs/${deviceId}`,
+      url: `${API_URL}/api/daily-logs`,
       cacheKey: `daily-logs:${deviceId}`,
     });
     if (data) set({ dailyLogs: data });
@@ -217,7 +216,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     await offlineFetch({
       url: `${API_URL}/api/abc-records`,
       method: 'POST',
-      body: { ...record, device_id: deviceId },
+      body: record,
     });
     await get().fetchABCRecords();
   },
@@ -227,7 +226,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!deviceId) return;
 
     const data = await offlineFetch<ABCRecord[]>({
-      url: `${API_URL}/api/abc-records/${deviceId}`,
+      url: `${API_URL}/api/abc-records`,
       cacheKey: `abc-records:${deviceId}`,
     });
     if (data) set({ abcRecords: data });
@@ -237,8 +236,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { deviceId } = get();
     if (!deviceId) return;
     await offlineFetch({
-      url: `${API_URL}/api/abc-records/${recordId}?device_id=${encodeURIComponent(deviceId)}&alternative_label=${encodeURIComponent(alternativeLabel)}&new_intensity=${newIntensity}`,
+      url: `${API_URL}/api/abc-records/${recordId}`,
       method: 'PUT',
+      body: { alternative_label: alternativeLabel, new_intensity: newIntensity },
     });
     await get().fetchABCRecords();
   },
@@ -252,7 +252,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const data = await offlineFetch<ExposureLadder>({
       url: `${API_URL}/api/exposure-ladder`,
       method: 'POST',
-      body: { device_id: deviceId, steps },
+      body: { steps },
     });
     if (data) set({ exposureLadder: data });
   },
@@ -262,7 +262,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!deviceId) return;
 
     const data = await offlineFetch<ExposureLadder>({
-      url: `${API_URL}/api/exposure-ladder/${deviceId}`,
+      url: `${API_URL}/api/exposure-ladder`,
       cacheKey: `exposure-ladder:${deviceId}`,
     });
     if (data) set({ exposureLadder: data });
@@ -273,9 +273,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!deviceId) return;
 
     const data = await offlineFetch<ExposureLadder>({
-      url: `${API_URL}/api/exposure-ladder/${deviceId}/attempt`,
+      url: `${API_URL}/api/exposure-ladder/attempt`,
       method: 'POST',
-      body: { device_id: deviceId, step_number: stepNumber, ...attempt },
+      body: { step_number: stepNumber, ...attempt },
     });
     if (data) set({ exposureLadder: data });
   },
@@ -289,7 +289,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     await offlineFetch({
       url: `${API_URL}/api/emergency-kit`,
       method: 'POST',
-      body: { ...item, device_id: deviceId },
+      body: item,
     });
     await get().fetchEmergencyKit();
   },
@@ -299,7 +299,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!deviceId) return;
 
     const data = await offlineFetch<EmergencyKitItem[]>({
-      url: `${API_URL}/api/emergency-kit/${deviceId}`,
+      url: `${API_URL}/api/emergency-kit`,
       cacheKey: `emergency-kit:${deviceId}`,
     });
     if (data) set({ emergencyKit: data });
@@ -309,7 +309,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { deviceId } = get();
     if (!deviceId) return;
     await offlineFetch({
-      url: `${API_URL}/api/emergency-kit/${itemId}?device_id=${encodeURIComponent(deviceId)}`,
+      url: `${API_URL}/api/emergency-kit/${itemId}`,
       method: 'DELETE',
     });
     await get().fetchEmergencyKit();
@@ -324,7 +324,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     await offlineFetch({
       url: `${API_URL}/api/questionnaire`,
       method: 'POST',
-      body: { ...response, device_id: deviceId },
+      body: response,
     });
     await get().fetchQuestionnaireResponses();
   },
@@ -334,7 +334,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!deviceId) return;
 
     const data = await offlineFetch<QuestionnaireResponse[]>({
-      url: `${API_URL}/api/questionnaire/${deviceId}`,
+      url: `${API_URL}/api/questionnaire`,
       cacheKey: `questionnaire:${deviceId}`,
     });
     if (data) set({ questionnaireResponses: data });
@@ -349,7 +349,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     await offlineFetch({
       url: `${API_URL}/api/factor-logs`,
       method: 'POST',
-      body: { ...log, device_id: deviceId },
+      body: log,
     });
     await get().fetchFactorLogs();
   },
@@ -359,7 +359,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!deviceId) return;
 
     const data = await offlineFetch<FactorLog[]>({
-      url: `${API_URL}/api/factor-logs/${deviceId}`,
+      url: `${API_URL}/api/factor-logs`,
       cacheKey: `factor-logs:${deviceId}`,
     });
     if (data) set({ factorLogs: data });
@@ -374,7 +374,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     await offlineFetch({
       url: `${API_URL}/api/mindfulness-sessions`,
       method: 'POST',
-      body: { ...session, device_id: deviceId },
+      body: session,
     });
     await get().fetchMindfulnessSessions();
   },
@@ -384,7 +384,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!deviceId) return;
 
     const data = await offlineFetch<MindfulnessSession[]>({
-      url: `${API_URL}/api/mindfulness-sessions/${deviceId}`,
+      url: `${API_URL}/api/mindfulness-sessions`,
       cacheKey: `mindfulness-sessions:${deviceId}`,
     });
     if (data) set({ mindfulnessSessions: data });
@@ -397,7 +397,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!deviceId) return;
 
     const data = await offlineFetch<UserSettings>({
-      url: `${API_URL}/api/settings/${deviceId}`,
+      url: `${API_URL}/api/settings`,
       cacheKey: `settings:${deviceId}`,
     });
     if (data) set({ settings: data });
@@ -408,7 +408,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!deviceId) return;
 
     const data = await offlineFetch<UserSettings>({
-      url: `${API_URL}/api/settings/${deviceId}`,
+      url: `${API_URL}/api/settings`,
       method: 'PUT',
       body: update,
     });
