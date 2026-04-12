@@ -315,7 +315,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!deviceId) return;
 
     await offlineFetch({
-      url: `${API_URL}/api/emergency-kit/${itemId}?device_id=${deviceId}`,
+      url: `${API_URL}/api/emergency-kit/${itemId}?device_id=${encodeURIComponent(deviceId)}`,
       method: 'DELETE',
     });
     await get().fetchEmergencyKit();
