@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Crypto from 'expo-crypto';
 import { UserProgress, DailyLog, ABCRecord, ExposureLadder, EmergencyKitItem, QuestionnaireResponse, FactorLog, MindfulnessSession, UserSettings } from '../types';
 import { scheduleDailyReminder, cancelAllReminders } from '../utils/notifications';
 import { offlineFetch, flushQueue } from '../utils/offlineSync';
@@ -97,7 +98,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         console.log('AsyncStorage error, using fallback:', e);
       }
       if (!deviceId) {
-        deviceId = `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        deviceId = Crypto.randomUUID();
         try {
           await AsyncStorage.setItem('device_id', deviceId);
         } catch (e) {
@@ -317,6 +318,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     await offlineFetch({
       url: `${API_URL}/api/emergency-kit/${itemId}?device_id=${encodeURIComponent(deviceId)}`,
       method: 'DELETE',
+      body: { device_id: deviceId },
     });
     await get().fetchEmergencyKit();
   },

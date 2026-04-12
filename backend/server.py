@@ -99,6 +99,11 @@ class DailyLogCreate(BaseModel):
     def check_date(cls, v: str) -> str:
         return validate_date_format(v)
 
+class ABCRecordUpdate(BaseModel):
+    device_id: str
+    alternative_label: str = Field(max_length=1000)
+    new_intensity: int = Field(ge=0, le=10)
+
 # ABC Record Model (for cognitive restructuring)
 class ABCRecord(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -184,6 +189,9 @@ class EmergencyKitItem(BaseModel):
     title: str = Field(max_length=200)
     content: str = Field(max_length=2000)
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class DeleteRequest(BaseModel):
+    device_id: str
 
 class EmergencyKitItemCreate(BaseModel):
     device_id: str
